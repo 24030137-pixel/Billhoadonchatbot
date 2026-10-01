@@ -3,8 +3,9 @@ from datetime import datetime
 from io import BytesIO
 import os
 
+
 # =========================================================
-# CẤU HÌNH TRANG
+# CAU HINH TRANG
 # =========================================================
 
 st.set_page_config(
@@ -14,8 +15,9 @@ st.set_page_config(
     initial_sidebar_state="collapsed"
 )
 
+
 # =========================================================
-# CSS GIAO DIỆN
+# CSS
 # =========================================================
 
 st.markdown(
@@ -77,40 +79,43 @@ st.markdown(
     unsafe_allow_html=True
 )
 
+
 # =========================================================
-# MENU
+# MENU TRA SUA
 # =========================================================
 
 MENU = {
-    "Trà sữa truyền thống": 25000,
-    "Trà sữa trân châu": 30000,
-    "Trà sữa matcha": 30000,
-    "Trà sữa socola": 30000,
-    "Trà sữa khoai môn": 32000,
-    "Trà sữa dâu": 30000,
-    "Trà đào": 28000,
-    "Trà vải": 28000,
-    "Trà chanh": 20000,
-    "Trà tắc": 20000,
+    "Tra sua truyen thong": 25000,
+    "Tra sua tran chau": 30000,
+    "Tra sua matcha": 30000,
+    "Tra sua socola": 30000,
+    "Tra sua khoai mon": 32000,
+    "Tra sua dau": 30000,
+    "Tra dao": 28000,
+    "Tra vai": 28000,
+    "Tra chanh": 20000,
+    "Tra tac": 20000,
 }
+
 
 # =========================================================
 # TOPPING
 # =========================================================
 
 TOPPINGS = {
-    "Trân châu đen": 5000,
-    "Trân châu trắng": 5000,
-    "Thạch dừa": 5000,
-    "Thạch trái cây": 5000,
-    "Pudding trứng": 7000,
+    "Tran chau den": 5000,
+    "Tran chau trang": 5000,
+    "Thach dua": 5000,
+    "Thach trai cay": 5000,
+    "Pudding trung": 7000,
     "Kem cheese": 8000,
-    "Trân châu hoàng kim": 7000,
-    "Hạt thủy tinh": 6000,
+    "Tran chau hoang kim": 7000,
+    "Hat thuy tinh": 6000,
 }
 
+
 # =========================================================
-# MỨC ĐƯỜNG / ĐÁ
+# MUC DUONG
 # =========================================================
 
 SUGAR_LEVELS = [
@@ -122,12 +127,18 @@ SUGAR_LEVELS = [
     "0%"
 ]
 
+
+# =========================================================
+# MUC DA
+# =========================================================
+
 ICE_LEVELS = [
     "100%",
     "90%",
     "80%",
     "70%"
 ]
+
 
 # =========================================================
 # SESSION STATE
@@ -141,15 +152,22 @@ if "bill_number" not in st.session_state:
 
 
 # =========================================================
-# HÀM ĐỊNH DẠNG TIỀN
+# HAM DINH DANG TIEN
 # =========================================================
 
 def format_money(number):
     return f"{number:,.0f} VNĐ".replace(",", ".")
 
 
+def format_money_pdf(number):
+    """
+    PDF dung chu khong dau.
+    """
+    return f"{number:,.0f} VND".replace(",", ".")
+
+
 # =========================================================
-# HÀM LẤY SỐ BILL
+# SO BILL
 # =========================================================
 
 def get_bill_number():
@@ -157,25 +175,35 @@ def get_bill_number():
 
 
 # =========================================================
-# TÍNH TIỀN MỘT MÓN
+# TINH TIEN TOPPING CHO 1 LY
 # =========================================================
 
-def calculate_item_total(item):
+def calculate_topping_total(item):
 
-    topping_total = sum(
+    return sum(
         TOPPINGS[topping]
         for topping in item["toppings"]
     )
 
-    price_per_cup = (
-        item["price"] + topping_total
+
+# =========================================================
+# TINH TIEN 1 LOAI TRA SUA
+# =========================================================
+
+def calculate_item_total(item):
+
+    topping_price_one_cup = calculate_topping_total(item)
+
+    price_one_cup = (
+        item["price"] +
+        topping_price_one_cup
     )
 
-    return price_per_cup * item["quantity"]
+    return price_one_cup * item["quantity"]
 
 
 # =========================================================
-# TÍNH TỔNG HÓA ĐƠN
+# TINH TONG HOA DON
 # =========================================================
 
 def calculate_total():
@@ -187,14 +215,13 @@ def calculate_total():
 
 
 # =========================================================
-# TẠO ICON MÈO / CHÓ
+# TAO ICON CHO / MEO
 # =========================================================
 
 def create_pet_icon(bill_number):
 
     from PIL import Image, ImageDraw
 
-    # Tạo ảnh nền trong suốt
     image = Image.new(
         "RGBA",
         (300, 300),
@@ -203,18 +230,13 @@ def create_pet_icon(bill_number):
 
     draw = ImageDraw.Draw(image)
 
-    # -----------------------------------------------------
-    # BILL LẺ = MÈO
-    # BILL CHẴN = CHÓ
-    # -----------------------------------------------------
+    # =====================================================
+    # BILL LE = MEO
+    # =====================================================
 
     if bill_number % 2 == 1:
 
-        # ==============================
-        # MÈO
-        # ==============================
-
-        # Tai trái
+        # Tai trai
         draw.polygon(
             [
                 (65, 95),
@@ -225,7 +247,7 @@ def create_pet_icon(bill_number):
             outline=(90, 70, 70)
         )
 
-        # Tai phải
+        # Tai phai
         draw.polygon(
             [
                 (180, 70),
@@ -236,7 +258,7 @@ def create_pet_icon(bill_number):
             outline=(90, 70, 70)
         )
 
-        # Mặt
+        # Mat
         draw.ellipse(
             (55, 55, 245, 245),
             fill=(255, 220, 190),
@@ -244,31 +266,29 @@ def create_pet_icon(bill_number):
             width=6
         )
 
-        # Má trái
+        # Ma
         draw.ellipse(
             (70, 165, 115, 200),
             fill=(255, 160, 175)
         )
 
-        # Má phải
         draw.ellipse(
             (185, 165, 230, 200),
             fill=(255, 160, 175)
         )
 
-        # Mắt trái
+        # Mat
         draw.ellipse(
             (90, 110, 120, 145),
             fill=(55, 45, 45)
         )
 
-        # Mắt phải
         draw.ellipse(
             (180, 110, 210, 145),
             fill=(55, 45, 45)
         )
 
-        # Chấm sáng mắt
+        # Diem sang
         draw.ellipse(
             (98, 115, 106, 123),
             fill="white"
@@ -279,7 +299,7 @@ def create_pet_icon(bill_number):
             fill="white"
         )
 
-        # Mũi
+        # Mui
         draw.polygon(
             [
                 (140, 150),
@@ -289,7 +309,7 @@ def create_pet_icon(bill_number):
             fill=(240, 120, 145)
         )
 
-        # Miệng
+        # Mieng
         draw.arc(
             (130, 155, 150, 180),
             0,
@@ -306,7 +326,7 @@ def create_pet_icon(bill_number):
             width=4
         )
 
-        # Râu trái
+        # Rau
         draw.line(
             (100, 155, 35, 145),
             fill=(90, 70, 70),
@@ -319,7 +339,6 @@ def create_pet_icon(bill_number):
             width=4
         )
 
-        # Râu phải
         draw.line(
             (200, 155, 265, 145),
             fill=(90, 70, 70),
@@ -332,13 +351,13 @@ def create_pet_icon(bill_number):
             width=4
         )
 
+    # =====================================================
+    # BILL CHAN = CHO
+    # =====================================================
+
     else:
 
-        # ==============================
-        # CHÓ
-        # ==============================
-
-        # Tai trái
+        # Tai trai
         draw.ellipse(
             (30, 70, 105, 190),
             fill=(170, 125, 90),
@@ -346,7 +365,7 @@ def create_pet_icon(bill_number):
             width=6
         )
 
-        # Tai phải
+        # Tai phai
         draw.ellipse(
             (195, 70, 270, 190),
             fill=(170, 125, 90),
@@ -354,7 +373,7 @@ def create_pet_icon(bill_number):
             width=6
         )
 
-        # Mặt
+        # Mat
         draw.ellipse(
             (55, 55, 245, 245),
             fill=(225, 185, 135),
@@ -362,25 +381,24 @@ def create_pet_icon(bill_number):
             width=6
         )
 
-        # Mõm
+        # Mom
         draw.ellipse(
             (105, 135, 195, 210),
             fill=(245, 220, 190)
         )
 
-        # Mắt trái
+        # Mat
         draw.ellipse(
             (90, 110, 120, 145),
             fill=(50, 45, 40)
         )
 
-        # Mắt phải
         draw.ellipse(
             (180, 110, 210, 145),
             fill=(50, 45, 40)
         )
 
-        # Chấm sáng
+        # Diem sang
         draw.ellipse(
             (98, 115, 106, 123),
             fill="white"
@@ -391,13 +409,13 @@ def create_pet_icon(bill_number):
             fill="white"
         )
 
-        # Mũi
+        # Mui
         draw.ellipse(
             (130, 145, 170, 175),
             fill=(50, 45, 45)
         )
 
-        # Miệng
+        # Mieng
         draw.arc(
             (130, 160, 150, 190),
             0,
@@ -414,7 +432,7 @@ def create_pet_icon(bill_number):
             width=4
         )
 
-        # Má
+        # Ma
         draw.ellipse(
             (70, 170, 110, 200),
             fill=(255, 170, 170)
@@ -429,7 +447,8 @@ def create_pet_icon(bill_number):
 
 
 # =========================================================
-# TẠO PDF HÓA ĐƠN
+# TAO PDF HOA DON
+# TOAN BO NOI DUNG PDF KHONG DAU
 # =========================================================
 
 def create_pdf():
@@ -461,7 +480,7 @@ def create_pdf():
         "C:/Windows/Fonts/arialbd.ttf"
     ]
 
-    # Font thường
+    # Font thuong
     for path in regular_paths:
 
         if os.path.exists(path):
@@ -476,13 +495,12 @@ def create_pdf():
                 )
 
                 regular_font = "LuckyTeaRegular"
-
                 break
 
             except Exception:
                 pass
 
-    # Font đậm
+    # Font dam
     for path in bold_paths:
 
         if os.path.exists(path):
@@ -497,14 +515,13 @@ def create_pdf():
                 )
 
                 bold_font = "LuckyTeaBold"
-
                 break
 
             except Exception:
                 pass
 
     # =====================================================
-    # TẠO CANVAS
+    # KHO GIAY A5
     # =====================================================
 
     c = canvas.Canvas(
@@ -517,7 +534,7 @@ def create_pdf():
     y = height - 30
 
     # =====================================================
-    # ICON CHÓ / MÈO
+    # ICON
     # =====================================================
 
     pet_icon = create_pet_icon(
@@ -545,7 +562,7 @@ def create_pdf():
     y -= 72
 
     # =====================================================
-    # TÊN LUCKY TEA
+    # LUCKY TEA
     # =====================================================
 
     c.setFont(
@@ -575,7 +592,7 @@ def create_pdf():
     y -= 22
 
     # =====================================================
-    # THÔNG TIN BILL
+    # THONG TIN BILL
     # =====================================================
 
     bill_number = get_bill_number()
@@ -606,7 +623,7 @@ def create_pdf():
     y -= 18
 
     # =====================================================
-    # ĐƯỜNG KẺ
+    # DUONG KE
     # =====================================================
 
     c.line(
@@ -619,7 +636,7 @@ def create_pdf():
     y -= 18
 
     # =====================================================
-    # DANH SÁCH MÓN
+    # DANH SACH MON
     # =====================================================
 
     for index, item in enumerate(
@@ -627,11 +644,21 @@ def create_pdf():
         start=1
     ):
 
+        # Gia topping tren 1 ly
+        topping_total_one_cup = calculate_topping_total(item)
+
+        # Gia 1 ly
+        price_one_cup = (
+            item["price"] +
+            topping_total_one_cup
+        )
+
+        # Tong mon
         item_total = calculate_item_total(item)
 
-        # -----------------------------------------------
-        # TÊN MÓN
-        # -----------------------------------------------
+        # -------------------------------------------------
+        # TEN MON
+        # -------------------------------------------------
 
         c.setFont(
             bold_font,
@@ -646,9 +673,9 @@ def create_pdf():
 
         y -= 14
 
-        # -----------------------------------------------
-        # SỐ LƯỢNG
-        # -----------------------------------------------
+        # -------------------------------------------------
+        # GIA TRA SUA
+        # -------------------------------------------------
 
         c.setFont(
             regular_font,
@@ -658,74 +685,134 @@ def create_pdf():
         c.drawString(
             42,
             y,
-            f"SL: {item['quantity']} x "
-            f"{format_money(item['price'])}"
+            f"Tra sua: {format_money_pdf(item['price'])}/ly"
         )
 
         y -= 13
 
-        # -----------------------------------------------
-        # ĐƯỜNG / ĐÁ
-        # -----------------------------------------------
+        # -------------------------------------------------
+        # SO LUONG
+        # -------------------------------------------------
 
         c.drawString(
             42,
             y,
-            f"Duong: {item['sugar']} | "
-            f"Da: {item['ice']}"
+            f"So luong: {item['quantity']} ly"
         )
 
         y -= 13
 
-        # -----------------------------------------------
+        # -------------------------------------------------
+        # DUONG / DA
+        # -------------------------------------------------
+
+        c.drawString(
+            42,
+            y,
+            f"Duong: {item['sugar']} | Da: {item['ice']}"
+        )
+
+        y -= 13
+
+        # -------------------------------------------------
         # TOPPING
-        # -----------------------------------------------
+        # -------------------------------------------------
 
         if item["toppings"]:
 
-            topping_text = ", ".join(
-                item["toppings"]
+            c.setFont(
+                bold_font,
+                8
             )
 
             c.drawString(
                 42,
                 y,
-                f"Topping: {topping_text}"
+                "Topping:"
+            )
+
+            y -= 12
+
+            c.setFont(
+                regular_font,
+                8
+            )
+
+            for topping in item["toppings"]:
+
+                topping_price = TOPPINGS[topping]
+
+                c.drawString(
+                    50,
+                    y,
+                    f"- {topping}: "
+                    f"{format_money_pdf(topping_price)}/ly"
+                )
+
+                y -= 12
+
+        else:
+
+            c.setFont(
+                regular_font,
+                8
+            )
+
+            c.drawString(
+                42,
+                y,
+                "Topping: Khong"
             )
 
             y -= 13
 
-        # -----------------------------------------------
-        # THÀNH TIỀN
-        # -----------------------------------------------
+        # -------------------------------------------------
+        # GIA 1 LY SAU TOPPING
+        # -------------------------------------------------
 
         c.setFont(
             bold_font,
             8
         )
 
+        c.drawString(
+            42,
+            y,
+            f"Gia 1 ly sau topping: "
+            f"{format_money_pdf(price_one_cup)}"
+        )
+
+        y -= 13
+
+        # -------------------------------------------------
+        # THANH TIEN
+        # -------------------------------------------------
+
         c.drawRightString(
             width - 30,
             y,
-            format_money(item_total)
+            f"Thanh tien: {format_money_pdf(item_total)}"
         )
 
-        y -= 18
+        y -= 20
 
-        # Nếu hóa đơn dài
+        # -------------------------------------------------
+        # XU LY BILL DAI
+        # -------------------------------------------------
+
         if y < 70:
 
             c.showPage()
+
+            y = height - 35
 
             c.setFont(
                 regular_font,
                 9
             )
 
-            y = height - 35
-
     # =====================================================
-    # TỔNG TIỀN
+    # TONG HOA DON
     # =====================================================
 
     c.line(
@@ -753,13 +840,13 @@ def create_pdf():
     c.drawRightString(
         width - 30,
         y,
-        format_money(total)
+        format_money_pdf(total)
     )
 
     y -= 30
 
     # =====================================================
-    # LỜI CẢM ƠN
+    # LOI CAM ON
     # =====================================================
 
     c.setFont(
@@ -782,7 +869,7 @@ def create_pdf():
     )
 
     # =====================================================
-    # LƯU PDF
+    # LUU PDF
     # =====================================================
 
     c.save()
@@ -793,7 +880,7 @@ def create_pdf():
 
 
 # =========================================================
-# ẢNH CHÍNH PHOTO1.JPG
+# ANH CHINH
 # =========================================================
 
 image_path = "photo1.jpg"
@@ -808,12 +895,12 @@ if os.path.exists(image_path):
 else:
 
     st.warning(
-        "Không tìm thấy ảnh photo1.jpg"
+        "Khong tim thay anh photo1.jpg"
     )
 
 
 # =========================================================
-# HEADER LUCKY TEA
+# HEADER
 # =========================================================
 
 st.markdown(
@@ -828,7 +915,7 @@ st.markdown(
 st.markdown(
     """
     <div class="lucky-subtitle">
-        Đặt món • Tùy chỉnh • Tính tiền • Xuất hóa đơn
+        Dat mon • Tuy chinh • Tinh tien • Xuat hoa don
     </div>
     """,
     unsafe_allow_html=True
@@ -838,7 +925,7 @@ st.divider()
 
 
 # =========================================================
-# KHU VỰC CHỌN MÓN
+# KHU VUC CHON MON
 # =========================================================
 
 left_col, right_col = st.columns(
@@ -848,26 +935,26 @@ left_col, right_col = st.columns(
 
 
 # =========================================================
-# CHỌN TRÀ SỮA
+# CHON TRA SUA
 # =========================================================
 
 with left_col:
 
-    st.subheader("🧋 Chọn thức uống")
+    st.subheader("🧋 Chon thuc uong")
 
     drink = st.selectbox(
-        "Loại trà sữa",
+        "Loai tra sua",
         list(MENU.keys())
     )
 
     price = MENU[drink]
 
     st.info(
-        f"Giá một ly: **{format_money(price)}**"
+        f"Gia mot ly: **{format_money(price)}**"
     )
 
     quantity = st.number_input(
-        "Số lượng",
+        "So luong",
         min_value=1,
         max_value=50,
         value=1,
@@ -876,53 +963,41 @@ with left_col:
 
 
 # =========================================================
-# ĐƯỜNG / ĐÁ
+# DUONG / DA
 # =========================================================
 
 with right_col:
 
-    st.subheader("⚙️ Tùy chỉnh")
+    st.subheader("⚙️ Tuy chinh")
 
     sugar = st.select_slider(
-        "🍬 Mức độ đường",
+        "🍬 Muc do duong",
         options=SUGAR_LEVELS,
         value="70%"
     )
 
     ice = st.select_slider(
-        "🧊 Mức độ đá",
+        "🧊 Muc do da",
         options=ICE_LEVELS,
         value="100%"
     )
 
 
 # =========================================================
-# TOPPING
+# TOPPING CHO RIENG MON DANG CHON
 # =========================================================
 
-st.subheader("🍡 Thêm topping")
+st.subheader("🍡 Topping cho mon nay")
 
 toppings = st.multiselect(
-    "Chọn topping",
-    list(TOPPINGS.keys())
+    "Chon topping",
+    list(TOPPINGS.keys()),
+    key="current_toppings"
 )
-
-if toppings:
-
-    topping_total = sum(
-        TOPPINGS[topping]
-        for topping in toppings
-    )
-
-    st.info(
-        "Topping: "
-        + ", ".join(toppings)
-        + f" | Phụ thu: **{format_money(topping_total)}**"
-    )
 
 
 # =========================================================
-# TÍNH TIỀN MÓN ĐANG CHỌN
+# HIEN THI TOPPING VA GIA
 # =========================================================
 
 current_topping_total = sum(
@@ -930,18 +1005,49 @@ current_topping_total = sum(
     for topping in toppings
 )
 
+if toppings:
+
+    st.info(
+        "Topping da chon: "
+        + ", ".join(toppings)
+        + f" | Them {format_money(current_topping_total)}/ly"
+    )
+
+else:
+
+    st.caption(
+        "Mon nay khong co topping."
+    )
+
+
+# =========================================================
+# TINH GIA MON DANG CHON
+# =========================================================
+
+current_price_one_cup = (
+    price +
+    current_topping_total
+)
+
 current_item_total = (
-    price + current_topping_total
-) * quantity
+    current_price_one_cup *
+    quantity
+)
+
 
 st.markdown(
     f"""
     <div class="total-box">
         <div class="total-title">
-            Thành tiền món đang chọn
+            Thanh tien mon dang chon
         </div>
+
         <div class="total-money">
             {format_money(current_item_total)}
+        </div>
+
+        <div>
+            {format_money(current_price_one_cup)} / ly
         </div>
     </div>
     """,
@@ -950,11 +1056,11 @@ st.markdown(
 
 
 # =========================================================
-# THÊM MÓN
+# THEM MON VAO BILL
 # =========================================================
 
 if st.button(
-    "➕ THÊM MÓN VÀO HÓA ĐƠN",
+    "➕ THEM MON VAO HOA DON",
     use_container_width=True
 ):
 
@@ -972,14 +1078,17 @@ if st.button(
     )
 
     st.success(
-        f"Đã thêm {quantity} ly {drink} vào hóa đơn!"
+        f"Da them {quantity} ly {drink} vao hoa don!"
     )
+
+    # Reset topping sau khi them
+    st.session_state.current_toppings = []
 
     st.rerun()
 
 
 # =========================================================
-# HÓA ĐƠN HIỆN TẠI
+# HOA DON HIEN TAI
 # =========================================================
 
 st.divider()
@@ -987,7 +1096,7 @@ st.divider()
 st.markdown(
     f"""
     <div class="bill-number">
-        🧾 HÓA ĐƠN {get_bill_number()}
+        🧾 HOA DON {get_bill_number()}
     </div>
     """,
     unsafe_allow_html=True
@@ -995,27 +1104,35 @@ st.markdown(
 
 
 # =========================================================
-# CHƯA CÓ MÓN
+# CHUA CO MON
 # =========================================================
 
 if len(st.session_state.cart) == 0:
 
     st.info(
-        "🧾 Chưa có món nào trong hóa đơn."
+        "🧾 Chua co mon nao trong hoa don."
     )
 
 
 # =========================================================
-# HIỂN THỊ HÓA ĐƠN
+# CO MON
 # =========================================================
 
 else:
+
+    # =====================================================
+    # HIEN THI TUNG MON
+    # =====================================================
 
     for index, item in enumerate(
         st.session_state.cart
     ):
 
         item_total = calculate_item_total(item)
+
+        topping_total_one_cup = calculate_topping_total(
+            item
+        )
 
         with st.container(
             border=True
@@ -1025,9 +1142,9 @@ else:
                 [4, 2, 1]
             )
 
-            # -------------------------------------------
-            # THÔNG TIN MÓN
-            # -------------------------------------------
+            # ------------------------------------------------
+            # THONG TIN MON
+            # ------------------------------------------------
 
             with col1:
 
@@ -1036,11 +1153,11 @@ else:
                 )
 
                 st.write(
-                    f"🍬 Đường: **{item['sugar']}**"
+                    f"🍬 Duong: **{item['sugar']}**"
                 )
 
                 st.write(
-                    f"🧊 Đá: **{item['ice']}**"
+                    f"🧊 Da: **{item['ice']}**"
                 )
 
                 if item["toppings"]:
@@ -1052,49 +1169,60 @@ else:
                         )
                     )
 
+                    st.caption(
+                        "Tien topping moi ly: "
+                        + format_money(
+                            topping_total_one_cup
+                        )
+                    )
+
                 else:
 
                     st.write(
-                        "🍡 Topping: Không"
+                        "🍡 Topping: Khong"
                     )
 
-            # -------------------------------------------
-            # SỐ LƯỢNG
-            # -------------------------------------------
+            # ------------------------------------------------
+            # SO LUONG
+            # ------------------------------------------------
 
             with col2:
 
-                st.write("Số lượng")
+                st.write(
+                    "So luong"
+                )
 
                 st.markdown(
-                    f"### {item['quantity']}"
+                    f"### {item['quantity']} ly"
                 )
 
                 st.write(
-                    "Đơn giá: "
+                    "Gia tra sua: "
                     + format_money(
                         item["price"]
                     )
                 )
 
-            # -------------------------------------------
-            # THÀNH TIỀN
-            # -------------------------------------------
+            # ------------------------------------------------
+            # THANH TIEN
+            # ------------------------------------------------
 
             with col3:
 
-                st.write("Thành tiền")
+                st.write(
+                    "Thanh tien"
+                )
 
                 st.markdown(
                     f"### {format_money(item_total)}"
                 )
 
-            # -------------------------------------------
-            # XÓA MÓN
-            # -------------------------------------------
+            # ------------------------------------------------
+            # XOA MON
+            # ------------------------------------------------
 
             if st.button(
-                "🗑️ Xóa món này",
+                "🗑️ Xoa mon nay",
                 key=f"delete_{index}",
                 use_container_width=True
             ):
@@ -1107,7 +1235,7 @@ else:
 
 
     # =====================================================
-    # TỔNG TIỀN
+    # TONG TIEN
     # =====================================================
 
     total = calculate_total()
@@ -1116,8 +1244,9 @@ else:
         f"""
         <div class="total-box">
             <div class="total-title">
-                💰 TỔNG THANH TOÁN
+                💰 TONG THANH TOAN
             </div>
+
             <div class="total-money">
                 {format_money(total)}
             </div>
@@ -1128,17 +1257,17 @@ else:
 
 
     # =====================================================
-    # XUẤT HÓA ĐƠN
+    # XUAT HOA DON
     # =====================================================
 
-    st.subheader("🧾 Xuất hóa đơn")
+    st.subheader("🧾 Xuat hoa don")
 
     try:
 
         pdf_file = create_pdf()
 
         st.download_button(
-            label="📄 XUẤT HÓA ĐƠN PDF",
+            label="📄 XUAT HOA DON PDF",
             data=pdf_file,
             file_name=f"{get_bill_number()}.pdf",
             mime="application/pdf",
@@ -1148,7 +1277,7 @@ else:
     except Exception as error:
 
         st.error(
-            "Không thể tạo hóa đơn PDF."
+            "Khong the tao hoa don PDF."
         )
 
         st.code(
@@ -1157,13 +1286,13 @@ else:
 
 
     # =====================================================
-    # THANH TOÁN
+    # THANH TOAN
     # =====================================================
 
     st.divider()
 
     if st.button(
-        "💰 THANH TOÁN & TẠO BILL MỚI",
+        "💰 THANH TOAN & TAO BILL MOI",
         use_container_width=True
     ):
 
@@ -1172,8 +1301,7 @@ else:
         st.session_state.bill_number += 1
 
         st.success(
-            "✅ Thanh toán thành công! "
-            f"Bill {get_bill_number()} đã được tạo."
+            "Thanh toan thanh cong!"
         )
 
         st.rerun()
@@ -1189,7 +1317,7 @@ st.markdown(
     """
     <div style="text-align:center;">
         🧋 <b>Lucky Tea</b><br>
-        Cảm ơn quý khách đã ủng hộ 💕
+        Cam on quy khach da ung ho 💕
     </div>
     """,
     unsafe_allow_html=True
