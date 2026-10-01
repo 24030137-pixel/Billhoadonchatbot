@@ -4,6 +4,10 @@ from io import BytesIO
 import unicodedata
 import re
 import os
+import json
+import urllib.request
+import urllib.error
+
 
 # =========================================================
 # CẤU HÌNH TRANG
@@ -16,14 +20,37 @@ st.set_page_config(
     initial_sidebar_state="collapsed"
 )
 
+
 # =========================================================
-# CSS GIAO DIỆN
+# OPENROUTER AI
+# =========================================================
+
+OPENROUTER_URL = "https://openrouter.ai/api/v1/chat/completions"
+OPENROUTER_MODEL = "openrouter/auto"
+
+OPENROUTER_API_KEY = os.getenv("OPENROUTER_API_KEY", "")
+
+try:
+    if not OPENROUTER_API_KEY:
+        OPENROUTER_API_KEY = st.secrets.get(
+            "OPENROUTER_API_KEY",
+            ""
+        )
+except Exception:
+    pass
+
+
+# =========================================================
+# CSS
 # =========================================================
 
 st.markdown(
     """
     <style>
-    .main { padding-top: 1rem; }
+
+    .main {
+        padding-top: 1rem;
+    }
 
     .lucky-title {
         text-align: center;
@@ -48,8 +75,15 @@ st.markdown(
         margin-bottom: 15px;
     }
 
-    .total-title { font-size: 18px; font-weight: 600; }
-    .total-money { font-size: 32px; font-weight: 800; }
+    .total-title {
+        font-size: 18px;
+        font-weight: 600;
+    }
+
+    .total-money {
+        font-size: 32px;
+        font-weight: 800;
+    }
 
     .bill-number {
         text-align: center;
@@ -58,108 +92,156 @@ st.markdown(
         margin-bottom: 15px;
     }
 
+    .ai-status {
+        padding: 8px 12px;
+        border-radius: 10px;
+        border: 1px solid rgba(128,128,128,.3);
+        margin-bottom: 10px;
+        text-align: center;
+    }
+
     div.stButton > button {
         border-radius: 10px;
         font-weight: 600;
         min-height: 45px;
     }
+
     </style>
     """,
     unsafe_allow_html=True
 )
 
+
 # =========================================================
-# DỮ LIỆU MENU
-# ---------------------------------------------------------
-# price : giá size M
-# sold  : số ly đã bán (dùng để xếp hạng bán chạy - bạn tự sửa)
-# new   : True nếu là món mới
-# tags  : đặc điểm để chatbot lọc theo sở thích
-# desc  : mô tả ngắn chatbot sẽ nói
+# MENU
 # =========================================================
 
 DRINK_INFO = {
+
     "Trà sữa truyền thống": {
-        "price": 25000, "sold": 950, "new": False,
+        "price": 25000,
+        "sold": 950,
+        "new": False,
         "tags": ["tra sua", "beo", "ngot"],
         "desc": "Vị cổ điển, béo nhẹ, dễ uống."
     },
+
     "Trà sữa trân châu": {
-        "price": 30000, "sold": 1200, "new": False,
+        "price": 30000,
+        "sold": 1200,
+        "new": False,
         "tags": ["tra sua", "beo", "ngot", "tran chau"],
         "desc": "Món quốc dân: trà sữa kèm trân châu dai dai."
     },
+
     "Trà sữa matcha": {
-        "price": 30000, "sold": 700, "new": False,
+        "price": 30000,
+        "sold": 700,
+        "new": False,
         "tags": ["tra sua", "beo", "matcha"],
         "desc": "Vị matcha thơm, hơi đắng nhẹ, ít ngọt."
     },
+
     "Trà sữa socola": {
-        "price": 30000, "sold": 600, "new": False,
+        "price": 30000,
+        "sold": 600,
+        "new": False,
         "tags": ["tra sua", "beo", "ngot", "socola"],
         "desc": "Đậm vị cacao, ngọt béo, hợp người thích đồ ngọt."
     },
+
     "Trà sữa khoai môn": {
-        "price": 32000, "sold": 650, "new": False,
+        "price": 32000,
+        "sold": 650,
+        "new": False,
         "tags": ["tra sua", "beo", "ngot", "khoai mon"],
         "desc": "Thơm mùi khoai môn, béo bùi."
     },
+
     "Trà sữa dâu": {
-        "price": 30000, "sold": 500, "new": False,
+        "price": 30000,
+        "sold": 500,
+        "new": False,
         "tags": ["tra sua", "ngot", "dau", "trai cay"],
         "desc": "Hương dâu ngọt ngào, màu hồng xinh."
     },
+
     "Trà đào": {
-        "price": 28000, "sold": 1000, "new": False,
+        "price": 28000,
+        "sold": 1000,
+        "new": False,
         "tags": ["trai cay", "mat", "chua", "dao"],
         "desc": "Thanh mát, chua ngọt vừa phải, giải khát tốt."
     },
+
     "Trà vải": {
-        "price": 28000, "sold": 550, "new": False,
+        "price": 28000,
+        "sold": 550,
+        "new": False,
         "tags": ["trai cay", "mat", "ngot", "vai"],
         "desc": "Hương vải thơm nhẹ, vị ngọt thanh."
     },
+
     "Trà chanh": {
-        "price": 20000, "sold": 800, "new": False,
+        "price": 20000,
+        "sold": 800,
+        "new": False,
         "tags": ["mat", "chua", "chanh"],
         "desc": "Chua nhẹ, tỉnh táo, giá mềm."
     },
+
     "Trà tắc": {
-        "price": 20000, "sold": 750, "new": False,
+        "price": 20000,
+        "sold": 750,
+        "new": False,
         "tags": ["mat", "chua", "tac"],
         "desc": "Chua chua thơm tắc, rất giải nhiệt."
     },
+
     "Trà sữa Oolong nướng": {
-        "price": 33000, "sold": 120, "new": True,
+        "price": 33000,
+        "sold": 120,
+        "new": True,
         "tags": ["tra sua", "beo", "oolong"],
         "desc": "Món mới! Trà oolong nướng thơm khói, béo dịu."
     },
+
     "Trà đào cam sả": {
-        "price": 30000, "sold": 150, "new": True,
+        "price": 30000,
+        "sold": 150,
+        "new": True,
         "tags": ["trai cay", "mat", "chua", "dao"],
         "desc": "Món mới! Đào, cam, sả thơm mát sảng khoái."
-    },
+    }
 }
 
-# Giá từng món (dùng cho phần tính tiền)
-MENU = {name: info["price"] for name, info in DRINK_INFO.items()}
 
-# Top 3 bán chạy nhất
+MENU = {
+    name: info["price"]
+    for name, info in DRINK_INFO.items()
+}
+
+
 BESTSELLERS = [
-    name for name, _ in sorted(
-        DRINK_INFO.items(), key=lambda kv: kv[1]["sold"], reverse=True
+    name
+    for name, _ in sorted(
+        DRINK_INFO.items(),
+        key=lambda x: x[1]["sold"],
+        reverse=True
     )[:3]
 ]
 
+
 CHEAP_LIMIT = 25000
 
-# Phụ thu theo size (M là mặc định)
+
 SIZES = {
     "M": 0,
     "L": 5000,
     "XL": 10000,
-    "XXL": 15000,
+    "XXL": 15000
 }
+
 
 TOPPINGS = {
     "Trân châu đen": 5000,
@@ -169,11 +251,27 @@ TOPPINGS = {
     "Pudding trứng": 7000,
     "Kem cheese": 8000,
     "Trân châu hoàng kim": 7000,
-    "Hạt thủy tinh": 6000,
+    "Hạt thủy tinh": 6000
 }
 
-SUGAR_LEVELS = ["100%", "80%", "70%", "50%", "30%", "0%"]
-ICE_LEVELS = ["100%", "90%", "80%", "70%"]
+
+SUGAR_LEVELS = [
+    "100%",
+    "80%",
+    "70%",
+    "50%",
+    "30%",
+    "0%"
+]
+
+
+ICE_LEVELS = [
+    "100%",
+    "90%",
+    "80%",
+    "70%"
+]
+
 
 # =========================================================
 # SESSION STATE
@@ -186,16 +284,22 @@ if "bill_number" not in st.session_state:
     st.session_state.bill_number = 1
 
 if "chat" not in st.session_state:
-    st.session_state.chat = [{
-        "role": "assistant",
-        "content": (
-            "Xin chào! 👋 Mình là trợ lý của **Lucky Tea**.\n\n"
-            "Bạn cứ hỏi mình kiểu như: *món bán chạy*, *món rẻ*, "
-            "*món mới*, *dưới 30k*, *món thanh mát*, *béo ngậy*, "
-            "*ít ngọt*, *topping ngon*..."
-        ),
-        "drinks": []
-    }]
+    st.session_state.chat = [
+        {
+            "role": "assistant",
+            "content": (
+                "Xin chào! 👋 Mình là trợ lý AI của **Lucky Tea** 🧋\n\n"
+                "Bạn có thể hỏi mình:\n\n"
+                "• Món nào bán chạy?\n"
+                "• Món nào dưới 30k?\n"
+                "• Món nào thanh mát?\n"
+                "• Mình thích béo nhưng ít ngọt thì uống gì?\n"
+                "• Tư vấn cho mình một ly nhé!\n"
+                "• Topping nào hợp với trà sữa?"
+            ),
+            "drinks": []
+        }
+    ]
 
 
 # =========================================================
@@ -206,15 +310,44 @@ def format_money(number):
     return f"{number:,.0f} VNĐ".replace(",", ".")
 
 
-def remove_accents(text):
-    """Chuyển tiếng Việt có dấu thành không dấu."""
-    text = str(text).replace("đ", "d").replace("Đ", "D")
-    text = unicodedata.normalize("NFD", text)
-    return "".join(ch for ch in text if unicodedata.category(ch) != "Mn")
-
-
 def pdf_money(number):
     return f"{number:,.0f} VND".replace(",", ".")
+
+
+def remove_accents(text):
+    text = str(text)
+    text = text.replace("đ", "d").replace("Đ", "D")
+
+    text = unicodedata.normalize(
+        "NFD",
+        text
+    )
+
+    return "".join(
+        ch for ch in text
+        if unicodedata.category(ch) != "Mn"
+    )
+
+
+def normalize(text):
+    return remove_accents(text).lower()
+
+
+def clean_words(text):
+    return re.sub(
+        r"[^a-z0-9\s]",
+        " ",
+        text
+    )
+
+
+def has_keyword(text, keywords):
+    padded = f" {text} "
+
+    return any(
+        f" {word} " in padded
+        for word in keywords
+    )
 
 
 def get_bill_number():
@@ -222,263 +355,766 @@ def get_bill_number():
 
 
 def calculate_cup_price(item):
-    topping_total = sum(TOPPINGS[t] for t in item["toppings"])
-    return item["price"] + SIZES[item["size"]] + topping_total
+
+    topping_total = sum(
+        TOPPINGS[t]
+        for t in item["toppings"]
+    )
+
+    return (
+        item["price"]
+        + SIZES[item["size"]]
+        + topping_total
+    )
 
 
 def calculate_item_total(item):
-    return calculate_cup_price(item) * item["quantity"]
+    return (
+        calculate_cup_price(item)
+        * item["quantity"]
+    )
 
 
 def calculate_total():
-    return sum(calculate_item_total(i) for i in st.session_state.cart)
+
+    return sum(
+        calculate_item_total(item)
+        for item in st.session_state.cart
+    )
 
 
 def total_cups():
-    return sum(i["quantity"] for i in st.session_state.cart)
+
+    return sum(
+        item["quantity"]
+        for item in st.session_state.cart
+    )
 
 
 def drink_badges(name):
+
     info = DRINK_INFO[name]
+
     badges = []
+
     if name in BESTSELLERS:
         badges.append("🔥 Bán chạy")
+
     if info["new"]:
         badges.append("🆕 Mới")
+
     if info["price"] <= CHEAP_LIMIT:
         badges.append("💸 Giá rẻ")
+
     return " ".join(badges)
 
 
 def drink_label(name):
+
     badges = drink_badges(name)
-    return f"{name}  {badges}" if badges else name
+
+    if badges:
+        return f"{name}  {badges}"
+
+    return name
 
 
 # =========================================================
-# CHATBOT GỢI Ý MÓN
+# CHATBOT CƠ BẢN
 # =========================================================
 
 BEST_WORDS = [
-    "ban chay", "bestseller", "best seller", "best", "hot", "pho bien",
-    "nhieu nguoi", "noi bat", "top", "ngon nhat", "yeu thich", "duoc ua chuong"
+    "ban chay",
+    "bestseller",
+    "best seller",
+    "hot",
+    "pho bien",
+    "nhieu nguoi",
+    "noi bat",
+    "top",
+    "yeu thich",
+    "duoc ua chuong"
 ]
+
+
 CHEAP_WORDS = [
-    "re", "gia re", "re nhat", "tiet kiem", "binh dan", "sinh vien",
-    "it tien", "gia mem", "mem gia", "kinh te"
+    "re",
+    "gia re",
+    "re nhat",
+    "tiet kiem",
+    "binh dan",
+    "sinh vien",
+    "it tien",
+    "gia mem",
+    "kinh te"
 ]
-NEW_WORDS = ["moi", "mon moi", "new", "ra mat", "vua ra"]
-DIET_WORDS = ["it ngot", "it duong", "an kieng", "healthy", "giam can", "tot cho suc khoe"]
-TOPPING_WORDS = ["topping", "top ping"]
-MENU_WORDS = ["menu", "thuc don", "danh sach", "tat ca"]
-GREETING_WORDS = ["xin chao", "chao", "hello", "hi", "alo", "hey"]
+
+
+NEW_WORDS = [
+    "moi",
+    "mon moi",
+    "new",
+    "ra mat",
+    "vua ra"
+]
+
+
+DIET_WORDS = [
+    "it ngot",
+    "it duong",
+    "an kieng",
+    "healthy",
+    "giam can"
+]
+
+
+TOPPING_WORDS = [
+    "topping",
+    "top ping"
+]
+
+
+MENU_WORDS = [
+    "menu",
+    "thuc don",
+    "danh sach",
+    "tat ca"
+]
+
+
+GREETING_WORDS = [
+    "xin chao",
+    "chao",
+    "hello",
+    "hi",
+    "alo",
+    "hey"
+]
+
 
 KEYWORDS = {
-    "tra sua": ["tra sua"],
-    "ngot": ["ngot", "dam vi"],
-    "beo": ["beo", "beo ngay", "beo beo"],
-    "chua": ["chua"],
-    "mat": ["mat", "thanh mat", "giai nhiet", "giai khat", "thanh nhe", "nhe nhang"],
-    "trai cay": ["trai cay", "hoa qua", "fruit"],
-    "matcha": ["matcha", "tra xanh"],
-    "socola": ["socola", "chocolate", "cacao"],
-    "dau": ["dau", "dau tay"],
-    "khoai mon": ["khoai mon", "khoai"],
-    "dao": ["dao"],
-    "vai": ["vai"],
-    "chanh": ["chanh"],
-    "tac": ["tac", "quat"],
-    "tran chau": ["tran chau"],
-    "oolong": ["oolong", "o long"],
+
+    "tra sua": [
+        "tra sua"
+    ],
+
+    "ngot": [
+        "ngot",
+        "dam vi"
+    ],
+
+    "beo": [
+        "beo",
+        "beo ngay",
+        "beo beo"
+    ],
+
+    "chua": [
+        "chua"
+    ],
+
+    "mat": [
+        "mat",
+        "thanh mat",
+        "giai nhiet",
+        "giai khat",
+        "thanh nhe"
+    ],
+
+    "trai cay": [
+        "trai cay",
+        "hoa qua",
+        "fruit"
+    ],
+
+    "matcha": [
+        "matcha",
+        "tra xanh"
+    ],
+
+    "socola": [
+        "socola",
+        "chocolate",
+        "cacao"
+    ],
+
+    "dau": [
+        "dau",
+        "dau tay"
+    ],
+
+    "khoai mon": [
+        "khoai mon",
+        "khoai"
+    ],
+
+    "dao": [
+        "dao"
+    ],
+
+    "vai": [
+        "vai"
+    ],
+
+    "chanh": [
+        "chanh"
+    ],
+
+    "tac": [
+        "tac",
+        "quat"
+    ],
+
+    "tran chau": [
+        "tran chau"
+    ],
+
+    "oolong": [
+        "oolong",
+        "o long"
+    ]
 }
 
 
-def normalize(text):
-    text = remove_accents(text).lower()
-    return text
+def parse_budget(text):
 
+    text = re.sub(
+        r"(?<=\d)[.,](?=\d{3}\b)",
+        "",
+        text
+    )
 
-def clean_words(norm):
-    """Bỏ dấu câu, giữ chữ và số."""
-    return re.sub(r"[^a-z0-9\s]", " ", norm)
+    match = re.search(
+        r"(\d+)\s*(k|nghin|ngan)\b",
+        text
+    )
 
+    if match:
+        return int(match.group(1)) * 1000
 
-def has(norm_clean, words):
-    padded = f" {norm_clean} "
-    return any(f" {w} " in padded for w in words)
+    match = re.search(
+        r"\b(\d{4,6})\b",
+        text
+    )
 
-
-def parse_budget(norm):
-    """Tìm ngân sách: '30k', '30.000', '30000', '30 nghin'."""
-    text = re.sub(r"(?<=\d)[.,](?=\d{3}\b)", "", norm)
-
-    m = re.search(r"(\d+)\s*(k|nghin|ngan)\b", text)
-    if m:
-        return int(m.group(1)) * 1000
-
-    m = re.search(r"\b(\d{4,6})\b", text)
-    if m:
-        return int(m.group(1))
+    if match:
+        return int(match.group(1))
 
     return None
 
 
 def suggestion_text(title, drinks):
-    lines = [title, ""]
+
+    lines = [
+        title,
+        ""
+    ]
+
     for name in drinks:
+
         info = DRINK_INFO[name]
+
         badges = drink_badges(name)
+
         lines.append(
-            f"• **{name}** — {format_money(info['price'])} {badges}  \n"
+            f"• **{name}** — "
+            f"{format_money(info['price'])} "
+            f"{badges}\n"
             f"  _{info['desc']}_"
         )
-    lines.append("")
-    lines.append("Bấm **Chọn** để chọn món, hoặc **Thêm nhanh** (size M) bên dưới 👇")
+
+    lines.extend([
+        "",
+        "Bấm **Chọn** để chỉnh size/topping "
+        "hoặc **Thêm nhanh** để thêm size M."
+    ])
+
     return "\n".join(lines)
 
 
 def chatbot_reply(text):
-    """Trả về (nội dung trả lời, danh sách món gợi ý)."""
 
     norm = normalize(text)
-    budget = parse_budget(norm)
+
     clean = clean_words(norm)
 
-    want_best = has(clean, BEST_WORDS)
-    want_cheap = has(clean, CHEAP_WORDS)
-    want_new = has(clean, NEW_WORDS)
-    want_diet = has(clean, DIET_WORDS)
-    want_topping = has(clean, TOPPING_WORDS)
-    want_menu = has(clean, MENU_WORDS)
+    budget = parse_budget(norm)
 
-    tags = [t for t, kws in KEYWORDS.items() if has(clean, kws)]
+    want_best = has_keyword(
+        clean,
+        BEST_WORDS
+    )
 
-    # "ít ngọt" thì không lọc theo tag "ngot"
+    want_cheap = has_keyword(
+        clean,
+        CHEAP_WORDS
+    )
+
+    want_new = has_keyword(
+        clean,
+        NEW_WORDS
+    )
+
+    want_diet = has_keyword(
+        clean,
+        DIET_WORDS
+    )
+
+    want_topping = has_keyword(
+        clean,
+        TOPPING_WORDS
+    )
+
+    want_menu = has_keyword(
+        clean,
+        MENU_WORDS
+    )
+
+    tags = [
+        tag
+        for tag, keywords in KEYWORDS.items()
+        if has_keyword(clean, keywords)
+    ]
+
     if want_diet:
-        tags = [t for t in tags if t != "ngot"] or ["mat"]
-        # "it ngot" làm "ngot" bị nhận nhầm, đã loại ở trên
-
-    # ---------- Xem toàn bộ menu ----------
-    if want_menu and not (want_best or want_cheap or want_new or tags or budget):
-        lines = ["📋 **Menu Lucky Tea** (giá size M):", ""]
-        for name, info in DRINK_INFO.items():
-            badges = drink_badges(name)
-            lines.append(f"• {name} — {format_money(info['price'])} {badges}")
-        lines.append("")
-        lines.append(
-            "Size: L +5.000 | XL +10.000 | XXL +15.000 VNĐ"
-        )
-        return "\n".join(lines), []
-
-    # ---------- Hỏi về topping ----------
-    if want_topping and not (want_best or want_cheap or want_new or tags or budget):
-        lines = [
-            "🍡 **Gợi ý topping:**",
-            "",
-            "• **Trân châu đen** (5.000) — kinh điển, hợp mọi loại trà sữa",
-            "• **Kem cheese** (8.000) — béo mặn nhẹ, hợp trà đào, trà vải, matcha",
-            "• **Pudding trứng** (7.000) — mềm mịn, hợp trà sữa truyền thống",
-            "• **Thạch trái cây** (5.000) — giòn mát, hợp các món trà trái cây",
-            "",
-            "💡 Combo được gọi nhiều: *Trà sữa trân châu + Kem cheese*.",
+        tags = [
+            tag
+            for tag in tags
+            if tag != "ngot"
         ]
+
+        if not tags:
+            tags = ["mat"]
+
+    # MENU
+
+    if (
+        want_menu
+        and not (
+            want_best
+            or want_cheap
+            or want_new
+            or tags
+            or budget
+        )
+    ):
+
+        lines = [
+            "📋 **Menu Lucky Tea**",
+            ""
+        ]
+
+        for name, info in DRINK_INFO.items():
+
+            lines.append(
+                f"• **{name}** — "
+                f"{format_money(info['price'])} "
+                f"{drink_badges(name)}"
+            )
+
+        lines.extend([
+            "",
+            "Size L +5.000 | "
+            "XL +10.000 | "
+            "XXL +15.000 VNĐ"
+        ])
+
         return "\n".join(lines), []
 
-    # ---------- Không có tiêu chí nào ----------
-    if not (want_best or want_cheap or want_new or want_diet or tags or budget):
+    # TOPPING
 
-        if has(clean, GREETING_WORDS):
+    if (
+        want_topping
+        and not (
+            want_best
+            or want_cheap
+            or want_new
+            or tags
+            or budget
+        )
+    ):
+
+        return (
+            "🍡 **Một số topping tại Lucky Tea:**\n\n"
+            "• Trân châu đen — 5.000 VNĐ\n"
+            "• Trân châu trắng — 5.000 VNĐ\n"
+            "• Thạch dừa — 5.000 VNĐ\n"
+            "• Thạch trái cây — 5.000 VNĐ\n"
+            "• Pudding trứng — 7.000 VNĐ\n"
+            "• Kem cheese — 8.000 VNĐ\n"
+            "• Trân châu hoàng kim — 7.000 VNĐ\n"
+            "• Hạt thủy tinh — 6.000 VNĐ\n\n"
+            "💡 Nếu thích béo, bạn có thể thử "
+            "Kem cheese hoặc Pudding trứng."
+        ), []
+
+    # GREETING
+
+    if not (
+        want_best
+        or want_cheap
+        or want_new
+        or want_diet
+        or tags
+        or budget
+    ):
+
+        if has_keyword(
+            clean,
+            GREETING_WORDS
+        ):
             return (
-                "Chào bạn! 😊 Hôm nay bạn muốn uống gì? "
-                "Mình có thể gợi ý món **bán chạy**, **giá rẻ**, **món mới** "
-                "hoặc theo vị bạn thích (béo, chua, thanh mát...)."
+                "Chào bạn! 🥰\n\n"
+                "Hôm nay bạn muốn uống gì? "
+                "Mình có thể tư vấn theo vị, "
+                "giá tiền hoặc sở thích của bạn nha!"
             ), []
 
         return (
-            "Mình chưa hiểu ý bạn lắm 😅. Bạn thử hỏi:\n\n"
-            "• *Món bán chạy nhất?*\n"
-            "• *Có món nào rẻ không?*\n"
-            "• *Món mới là gì?*\n"
-            "• *Dưới 30k uống gì?*\n"
-            "• *Món thanh mát / béo ngậy / chua ngọt*\n"
-            "• *Ít ngọt cho người ăn kiêng*\n"
-            "• *Topping nào ngon?*\n"
-            "• *Cho mình xem menu*"
+            "Mình chưa hiểu ý bạn lắm 😅\n\n"
+            "Bạn có thể hỏi:\n\n"
+            "• Món bán chạy nhất?\n"
+            "• Có món nào dưới 30k không?\n"
+            "• Món mới là gì?\n"
+            "• Món nào thanh mát?\n"
+            "• Mình thích béo nhưng ít ngọt\n"
+            "• Topping nào ngon?\n"
+            "• Cho mình xem menu"
         ), []
 
-    # ---------- Lọc món ----------
-    candidates = list(DRINK_INFO.items())
+    # FILTER
+
+    candidates = list(
+        DRINK_INFO.items()
+    )
 
     if budget:
-        candidates = [(n, i) for n, i in candidates if i["price"] <= budget]
 
-    if want_new:
-        candidates = [(n, i) for n, i in candidates if i["new"]]
-
-    if tags:
         candidates = [
-            (n, i) for n, i in candidates
-            if any(t in i["tags"] for t in tags)
+            item
+            for item in candidates
+            if item[1]["price"] <= budget
         ]
 
-    # ---------- Sắp xếp ----------
-    if want_cheap:
-        candidates.sort(key=lambda kv: (kv[1]["price"], -kv[1]["sold"]))
-    else:
-        candidates.sort(key=lambda kv: kv[1]["sold"], reverse=True)
+    if want_new:
 
-    # ---------- Tiêu đề ----------
+        candidates = [
+            item
+            for item in candidates
+            if item[1]["new"]
+        ]
+
+    if tags:
+
+        candidates = [
+            item
+            for item in candidates
+            if any(
+                tag in item[1]["tags"]
+                for tag in tags
+            )
+        ]
+
+    # SORT
+
+    if want_cheap:
+
+        candidates.sort(
+            key=lambda x: (
+                x[1]["price"],
+                -x[1]["sold"]
+            )
+        )
+
+    else:
+
+        candidates.sort(
+            key=lambda x: x[1]["sold"],
+            reverse=True
+        )
+
+    # TITLE
+
     parts = []
+
     if want_best:
         parts.append("bán chạy")
+
     if want_cheap:
         parts.append("giá rẻ")
+
     if want_new:
         parts.append("món mới")
+
     if want_diet:
-        parts.append("nhẹ vị, ít ngọt")
+        parts.append("ít ngọt")
+
     if budget:
-        parts.append(f"trong tầm {format_money(budget)}")
+        parts.append(
+            f"dưới {format_money(budget)}"
+        )
+
     if tags and not want_diet:
         parts.append("hợp vị bạn chọn")
 
-    title_core = ", ".join(parts) if parts else "phù hợp"
+    title = ", ".join(parts)
 
-    # ---------- Không tìm thấy ----------
+    if not title:
+        title = "phù hợp với bạn"
+
+    # NOT FOUND
+
     if not candidates:
-        cheapest = min(DRINK_INFO.items(), key=lambda kv: kv[1]["price"])
-        return (
-            f"Hmm, mình chưa tìm được món nào {title_core} 😢.\n\n"
-            f"Món rẻ nhất hiện tại là **{cheapest[0]}** "
-            f"({format_money(cheapest[1]['price'])}). "
-            "Bạn thử nới ngân sách hoặc đổi yêu cầu nhé!"
-        ), []
 
-    top = [n for n, _ in candidates[:3]]
-    reply = suggestion_text(f"✨ Gợi ý {title_core} cho bạn:", top)
-
-    if want_diet:
-        reply += (
-            "\n\n💡 Mẹo: chọn đường **30%–50%** và bỏ topping ngọt "
-            "để nhẹ vị hơn."
+        cheapest = min(
+            DRINK_INFO.items(),
+            key=lambda x: x[1]["price"]
         )
 
-    return reply, top
+        return (
+            f"Hmm, mình chưa tìm được món "
+            f"{title} 😢.\n\n"
+            f"Món rẻ nhất hiện tại là "
+            f"**{cheapest[0]}** "
+            f"({format_money(cheapest[1]['price'])})."
+        ), []
 
+    drinks = [
+        name
+        for name, _ in candidates[:3]
+    ]
+
+    reply = suggestion_text(
+        f"✨ Gợi ý {title} cho bạn:",
+        drinks
+    )
+
+    if want_diet:
+
+        reply += (
+            "\n\n💡 Mẹo: bạn có thể chọn "
+            "đường 30%–50% và hạn chế topping "
+            "ngọt."
+        )
+
+    return reply, drinks
+
+
+# =========================================================
+# AI OPENROUTER
+# =========================================================
+
+def build_menu_for_ai():
+
+    lines = []
+
+    for name, info in DRINK_INFO.items():
+
+        lines.append(
+            f"- {name}: "
+            f"{info['price']:,} VND; "
+            f"{info['desc']}; "
+            f"tags={', '.join(info['tags'])}"
+        )
+
+    lines.append("")
+    lines.append("Size:")
+    
+    for size, fee in SIZES.items():
+
+        lines.append(
+            f"- {size}: +{fee:,} VND"
+        )
+
+    lines.append("")
+    lines.append("Topping:")
+
+    for topping, price in TOPPINGS.items():
+
+        lines.append(
+            f"- {topping}: +{price:,} VND"
+        )
+
+    return "\n".join(lines)
+
+
+def call_openrouter(user_text):
+
+    if not OPENROUTER_API_KEY:
+        return None
+
+    menu_text = build_menu_for_ai()
+
+    system_prompt = f"""
+Bạn là trợ lý bán hàng AI của quán trà sữa Lucky Tea.
+
+Nhiệm vụ:
+- Tư vấn đồ uống thân thiện, tự nhiên.
+- Chỉ được giới thiệu món có trong menu.
+- Không được tự tạo món hoặc tự tạo giá.
+- Khi khách hỏi giá, phải dùng đúng giá trong menu.
+- Có thể tư vấn theo vị: béo, ngọt, chua, thanh mát,
+  trái cây, matcha, socola...
+- Có thể tư vấn theo ngân sách.
+- Có thể tư vấn topping.
+- Nếu khách chưa biết uống gì, hãy hỏi hoặc đưa ra
+  2-3 lựa chọn phù hợp.
+- Không cần nói mình là mô hình AI.
+- Trả lời bằng tiếng Việt.
+- Nói chuyện thân thiện như nhân viên Lucky Tea.
+- Không trả lời quá dài.
+
+MENU LUCKY TEA:
+
+{menu_text}
+"""
+
+    recent_messages = []
+
+    for msg in st.session_state.chat[-8:]:
+
+        recent_messages.append({
+            "role": msg["role"],
+            "content": msg["content"]
+        })
+
+    recent_messages.append({
+        "role": "user",
+        "content": user_text
+    })
+
+    payload = {
+        "model": OPENROUTER_MODEL,
+        "messages": [
+            {
+                "role": "system",
+                "content": system_prompt
+            },
+            *recent_messages
+        ],
+        "temperature": 0.7,
+        "max_tokens": 500
+    }
+
+    data = json.dumps(
+        payload,
+        ensure_ascii=False
+    ).encode("utf-8")
+
+    request = urllib.request.Request(
+        OPENROUTER_URL,
+        data=data,
+        headers={
+            "Authorization":
+                f"Bearer {OPENROUTER_API_KEY}",
+            "Content-Type":
+                "application/json",
+            "HTTP-Referer":
+                "https://luckytea.local",
+            "X-Title":
+                "Lucky Tea"
+        },
+        method="POST"
+    )
+
+    try:
+
+        with urllib.request.urlopen(
+            request,
+            timeout=45
+        ) as response:
+
+            result = json.loads(
+                response.read().decode("utf-8")
+            )
+
+        choices = result.get(
+            "choices",
+            []
+        )
+
+        if not choices:
+            return None
+
+        message = choices[0].get(
+            "message",
+            {}
+        )
+
+        answer = message.get(
+            "content",
+            ""
+        )
+
+        if not answer:
+            return None
+
+        return answer.strip()
+
+    except Exception:
+        return None
+
+
+def extract_drinks_from_ai(text):
+
+    found = []
+
+    normalized_text = normalize(text)
+
+    for name in DRINK_INFO:
+
+        if normalize(name) in normalized_text:
+
+            if name not in found:
+                found.append(name)
+
+    return found[:3]
+
+
+# =========================================================
+# CHAT
+# =========================================================
 
 def ask_bot(text):
-    """Thêm câu hỏi + câu trả lời vào lịch sử chat."""
-    st.session_state.chat.append(
-        {"role": "user", "content": text, "drinks": []}
-    )
-    reply, drinks = chatbot_reply(text)
-    st.session_state.chat.append(
-        {"role": "assistant", "content": reply, "drinks": drinks}
-    )
+
+    st.session_state.chat.append({
+        "role": "user",
+        "content": text,
+        "drinks": []
+    })
+
+    ai_reply = call_openrouter(text)
+
+    if ai_reply:
+
+        drinks = extract_drinks_from_ai(
+            ai_reply
+        )
+
+        st.session_state.chat.append({
+            "role": "assistant",
+            "content": ai_reply,
+            "drinks": drinks
+        })
+
+    else:
+
+        reply, drinks = chatbot_reply(text)
+
+        st.session_state.chat.append({
+            "role": "assistant",
+            "content": reply,
+            "drinks": drinks
+        })
 
 
 def submit_chat():
-    text = st.session_state.get("chat_text", "").strip()
+
+    text = st.session_state.get(
+        "chat_text",
+        ""
+    ).strip()
+
     if text:
         ask_bot(text)
 
@@ -487,12 +1123,25 @@ def quick_ask(text):
     ask_bot(text)
 
 
+def reset_chat():
+
+    st.session_state.chat = [
+        st.session_state.chat[0]
+    ]
+
+
 def select_drink_from_chat(name):
+
     st.session_state.drink_select = name
-    st.toast(f"Đã chọn {name}, kéo xuống để chỉnh size/topping!", icon="👇")
+
+    st.toast(
+        f"Đã chọn {name}!",
+        icon="👇"
+    )
 
 
 def add_from_chat(name):
+
     st.session_state.cart.append({
         "name": name,
         "price": MENU[name],
@@ -500,71 +1149,215 @@ def add_from_chat(name):
         "quantity": 1,
         "toppings": [],
         "sugar": "70%",
-        "ice": "100%",
+        "ice": "100%"
     })
-    st.toast(f"Đã thêm 1 ly {name} (size M) vào hóa đơn!", icon="✅")
 
-
-def reset_chat():
-    st.session_state.chat = st.session_state.chat[:1]
+    st.toast(
+        f"Đã thêm 1 ly {name}!",
+        icon="✅"
+    )
 
 
 # =========================================================
-# TẠO ICON MÈO / CHÓ
+# ICON CHÓ / MÈO
 # =========================================================
 
 def create_pet_icon(bill_number):
 
     from PIL import Image, ImageDraw
 
-    image = Image.new("RGBA", (300, 300), (255, 255, 255, 0))
+    image = Image.new(
+        "RGBA",
+        (300, 300),
+        (255, 255, 255, 0)
+    )
+
     draw = ImageDraw.Draw(image)
 
     if bill_number % 2 == 1:
-        # ---------------- MÈO ----------------
-        draw.polygon([(65, 95), (50, 25), (120, 70)],
-                     fill=(255, 190, 200), outline=(90, 70, 70))
-        draw.polygon([(180, 70), (250, 25), (235, 95)],
-                     fill=(255, 190, 200), outline=(90, 70, 70))
-        draw.ellipse((55, 55, 245, 245),
-                     fill=(255, 220, 190), outline=(90, 70, 70), width=6)
-        draw.ellipse((70, 165, 115, 200), fill=(255, 160, 175))
-        draw.ellipse((185, 165, 230, 200), fill=(255, 160, 175))
-        draw.ellipse((90, 110, 120, 145), fill=(55, 45, 45))
-        draw.ellipse((180, 110, 210, 145), fill=(55, 45, 45))
-        draw.ellipse((98, 115, 106, 123), fill="white")
-        draw.ellipse((188, 115, 196, 123), fill="white")
-        draw.polygon([(140, 150), (160, 150), (150, 165)], fill=(240, 120, 145))
-        draw.arc((130, 155, 150, 180), 0, 180, fill=(80, 60, 60), width=4)
-        draw.arc((150, 155, 170, 180), 0, 180, fill=(80, 60, 60), width=4)
-        draw.line((100, 155, 35, 145), fill=(90, 70, 70), width=4)
-        draw.line((100, 170, 30, 175), fill=(90, 70, 70), width=4)
-        draw.line((200, 155, 265, 145), fill=(90, 70, 70), width=4)
-        draw.line((200, 170, 270, 175), fill=(90, 70, 70), width=4)
+
+        # MÈO
+
+        draw.polygon(
+            [(65, 95), (50, 25), (120, 70)],
+            fill=(255, 190, 200),
+            outline=(90, 70, 70)
+        )
+
+        draw.polygon(
+            [(180, 70), (250, 25), (235, 95)],
+            fill=(255, 190, 200),
+            outline=(90, 70, 70)
+        )
+
+        draw.ellipse(
+            (55, 55, 245, 245),
+            fill=(255, 220, 190),
+            outline=(90, 70, 70),
+            width=6
+        )
+
+        draw.ellipse(
+            (70, 165, 115, 200),
+            fill=(255, 160, 175)
+        )
+
+        draw.ellipse(
+            (185, 165, 230, 200),
+            fill=(255, 160, 175)
+        )
+
+        draw.ellipse(
+            (90, 110, 120, 145),
+            fill=(55, 45, 45)
+        )
+
+        draw.ellipse(
+            (180, 110, 210, 145),
+            fill=(55, 45, 45)
+        )
+
+        draw.ellipse(
+            (98, 115, 106, 123),
+            fill="white"
+        )
+
+        draw.ellipse(
+            (188, 115, 196, 123),
+            fill="white"
+        )
+
+        draw.polygon(
+            [(140, 150), (160, 150), (150, 165)],
+            fill=(240, 120, 145)
+        )
+
+        draw.arc(
+            (130, 155, 150, 180),
+            0,
+            180,
+            fill=(80, 60, 60),
+            width=4
+        )
+
+        draw.arc(
+            (150, 155, 170, 180),
+            0,
+            180,
+            fill=(80, 60, 60),
+            width=4
+        )
+
+        draw.line(
+            (100, 155, 35, 145),
+            fill=(90, 70, 70),
+            width=4
+        )
+
+        draw.line(
+            (100, 170, 30, 175),
+            fill=(90, 70, 70),
+            width=4
+        )
+
+        draw.line(
+            (200, 155, 265, 145),
+            fill=(90, 70, 70),
+            width=4
+        )
+
+        draw.line(
+            (200, 170, 270, 175),
+            fill=(90, 70, 70),
+            width=4
+        )
+
     else:
-        # ---------------- CHÓ ----------------
-        draw.ellipse((30, 70, 105, 190),
-                     fill=(170, 125, 90), outline=(90, 70, 60), width=6)
-        draw.ellipse((195, 70, 270, 190),
-                     fill=(170, 125, 90), outline=(90, 70, 60), width=6)
-        draw.ellipse((55, 55, 245, 245),
-                     fill=(225, 185, 135), outline=(90, 70, 60), width=6)
-        draw.ellipse((105, 135, 195, 210), fill=(245, 220, 190))
-        draw.ellipse((90, 110, 120, 145), fill=(50, 45, 40))
-        draw.ellipse((180, 110, 210, 145), fill=(50, 45, 40))
-        draw.ellipse((98, 115, 106, 123), fill="white")
-        draw.ellipse((188, 115, 196, 123), fill="white")
-        draw.ellipse((130, 145, 170, 175), fill=(50, 45, 45))
-        draw.arc((130, 160, 150, 190), 0, 180, fill=(70, 55, 50), width=4)
-        draw.arc((150, 160, 170, 190), 0, 180, fill=(70, 55, 50), width=4)
-        draw.ellipse((70, 170, 110, 200), fill=(255, 170, 170))
-        draw.ellipse((190, 170, 230, 200), fill=(255, 170, 170))
+
+        # CHÓ
+
+        draw.ellipse(
+            (30, 70, 105, 190),
+            fill=(170, 125, 90),
+            outline=(90, 70, 60),
+            width=6
+        )
+
+        draw.ellipse(
+            (195, 70, 270, 190),
+            fill=(170, 125, 90),
+            outline=(90, 70, 60),
+            width=6
+        )
+
+        draw.ellipse(
+            (55, 55, 245, 245),
+            fill=(225, 185, 135),
+            outline=(90, 70, 60),
+            width=6
+        )
+
+        draw.ellipse(
+            (105, 135, 195, 210),
+            fill=(245, 220, 190)
+        )
+
+        draw.ellipse(
+            (90, 110, 120, 145),
+            fill=(50, 45, 40)
+        )
+
+        draw.ellipse(
+            (180, 110, 210, 145),
+            fill=(50, 45, 40)
+        )
+
+        draw.ellipse(
+            (98, 115, 106, 123),
+            fill="white"
+        )
+
+        draw.ellipse(
+            (188, 115, 196, 123),
+            fill="white"
+        )
+
+        draw.ellipse(
+            (130, 145, 170, 175),
+            fill=(50, 45, 45)
+        )
+
+        draw.arc(
+            (130, 160, 150, 190),
+            0,
+            180,
+            fill=(70, 55, 50),
+            width=4
+        )
+
+        draw.arc(
+            (150, 160, 170, 190),
+            0,
+            180,
+            fill=(70, 55, 50),
+            width=4
+        )
+
+        draw.ellipse(
+            (70, 170, 110, 200),
+            fill=(255, 170, 170)
+        )
+
+        draw.ellipse(
+            (190, 170, 230, 200),
+            fill=(255, 170, 170)
+        )
 
     return image
 
 
 # =========================================================
-# TẠO PDF HÓA ĐƠN (CHỮ KHÔNG DẤU)
+# TẠO PDF
 # =========================================================
 
 def create_pdf():
@@ -578,31 +1371,59 @@ def create_pdf():
     regular_font = "Helvetica"
     bold_font = "Helvetica-Bold"
 
-    c = canvas.Canvas(buffer, pagesize=A5)
+    canvas_pdf = canvas.Canvas(
+        buffer,
+        pagesize=A5
+    )
+
     width, height = A5
 
     left = 30
     right = width - 30
-    state = {"y": height - 30}
+
+    state = {
+        "y": height - 30
+    }
 
     def ensure_space(needed):
+
         if state["y"] - needed < 50:
-            c.showPage()
+
+            canvas_pdf.showPage()
+
             state["y"] = height - 40
-            c.setFont(bold_font, 10)
-            c.drawCentredString(
-                width / 2, state["y"],
-                f"LUCKY TEA - {get_bill_number()} (tiep theo)"
+
+            canvas_pdf.setFont(
+                bold_font,
+                10
             )
+
+            canvas_pdf.drawCentredString(
+                width / 2,
+                state["y"],
+                f"LUCKY TEA - "
+                f"{get_bill_number()} "
+                f"(tiep theo)"
+            )
+
             state["y"] -= 22
 
-    # Icon chó / mèo
-    pet_icon = create_pet_icon(st.session_state.bill_number)
+    # ICON
+
+    pet_icon = create_pet_icon(
+        st.session_state.bill_number
+    )
+
     pet_buffer = BytesIO()
-    pet_icon.save(pet_buffer, format="PNG")
+
+    pet_icon.save(
+        pet_buffer,
+        format="PNG"
+    )
+
     pet_buffer.seek(0)
 
-    c.drawImage(
+    canvas_pdf.drawImage(
         ImageReader(pet_buffer),
         width / 2 - 30,
         state["y"] - 5,
@@ -610,118 +1431,311 @@ def create_pdf():
         height=60,
         mask="auto"
     )
+
     state["y"] -= 72
 
-    # Tiêu đề
-    c.setFont(bold_font, 19)
-    c.drawCentredString(width / 2, state["y"], "LUCKY TEA")
+    # HEADER
+
+    canvas_pdf.setFont(
+        bold_font,
+        19
+    )
+
+    canvas_pdf.drawCentredString(
+        width / 2,
+        state["y"],
+        "LUCKY TEA"
+    )
+
     state["y"] -= 20
 
-    c.setFont(regular_font, 10)
-    c.drawCentredString(width / 2, state["y"], "HOA DON BAN HANG")
+    canvas_pdf.setFont(
+        regular_font,
+        10
+    )
+
+    canvas_pdf.drawCentredString(
+        width / 2,
+        state["y"],
+        "HOA DON BAN HANG"
+    )
+
     state["y"] -= 22
 
-    # Thông tin bill
-    current_time = datetime.now().strftime("%d/%m/%Y %H:%M")
+    # BILL INFO
 
-    c.setFont(regular_font, 9)
-    c.drawString(left, state["y"], f"So bill: {get_bill_number()}")
-    state["y"] -= 14
-    c.drawString(left, state["y"], f"Thoi gian: {current_time}")
-    state["y"] -= 14
-    c.drawString(left, state["y"], f"Tong so ly: {total_cups()}")
+    current_time = datetime.now().strftime(
+        "%d/%m/%Y %H:%M"
+    )
+
+    canvas_pdf.setFont(
+        regular_font,
+        9
+    )
+
+    canvas_pdf.drawString(
+        left,
+        state["y"],
+        f"So bill: {get_bill_number()}"
+    )
+
     state["y"] -= 14
 
-    c.line(left, state["y"], right, state["y"])
+    canvas_pdf.drawString(
+        left,
+        state["y"],
+        f"Thoi gian: {current_time}"
+    )
+
+    state["y"] -= 14
+
+    canvas_pdf.drawString(
+        left,
+        state["y"],
+        f"Tong so ly: {total_cups()}"
+    )
+
+    state["y"] -= 14
+
+    canvas_pdf.line(
+        left,
+        state["y"],
+        right,
+        state["y"]
+    )
+
     state["y"] -= 18
 
-    # Danh sách món
-    for index, item in enumerate(st.session_state.cart, start=1):
+    # PRODUCTS
 
-        size_fee = SIZES[item["size"]]
-        n_toppings = len(item["toppings"])
+    for index, item in enumerate(
+        st.session_state.cart,
+        start=1
+    ):
 
-        needed = 14 + 13 + 13 + (13 if size_fee else 0) + 13 * n_toppings + 13 + 18
+        size_fee = SIZES[
+            item["size"]
+        ]
+
+        n_toppings = len(
+            item["toppings"]
+        )
+
+        needed = (
+            14
+            + 13
+            + 13
+            + (13 if size_fee else 0)
+            + 13 * n_toppings
+            + 13
+            + 18
+        )
+
         ensure_space(needed)
 
-        c.setFont(bold_font, 9)
-        c.drawString(
-            left, state["y"],
-            remove_accents(f"{index}. {item['name']} - Size {item['size']}")
+        canvas_pdf.setFont(
+            bold_font,
+            9
         )
+
+        canvas_pdf.drawString(
+            left,
+            state["y"],
+            remove_accents(
+                f"{index}. "
+                f"{item['name']} - "
+                f"Size {item['size']}"
+            )
+        )
+
         state["y"] -= 14
 
-        c.setFont(regular_font, 8)
-        c.drawString(
-            left + 12, state["y"],
-            f"Duong: {item['sugar']} | Da: {item['ice']}"
+        canvas_pdf.setFont(
+            regular_font,
+            8
         )
+
+        canvas_pdf.drawString(
+            left + 12,
+            state["y"],
+            f"Duong: {item['sugar']} | "
+            f"Da: {item['ice']}"
+        )
+
         state["y"] -= 13
 
-        c.drawString(left + 12, state["y"], "Gia nuoc:")
-        c.drawRightString(right, state["y"], pdf_money(item["price"]))
+        canvas_pdf.drawString(
+            left + 12,
+            state["y"],
+            "Gia nuoc:"
+        )
+
+        canvas_pdf.drawRightString(
+            right,
+            state["y"],
+            pdf_money(item["price"])
+        )
+
         state["y"] -= 13
 
         if size_fee:
-            c.drawString(left + 12, state["y"], f"Phu thu size {item['size']}:")
-            c.drawRightString(right, state["y"], "+ " + pdf_money(size_fee))
+
+            canvas_pdf.drawString(
+                left + 12,
+                state["y"],
+                f"Phu thu size "
+                f"{item['size']}:"
+            )
+
+            canvas_pdf.drawRightString(
+                right,
+                state["y"],
+                "+ " + pdf_money(size_fee)
+            )
+
             state["y"] -= 13
 
         for topping in item["toppings"]:
-            c.drawString(left + 12, state["y"], remove_accents(f"+ {topping}"))
-            c.drawRightString(right, state["y"], "+ " + pdf_money(TOPPINGS[topping]))
+
+            canvas_pdf.drawString(
+                left + 12,
+                state["y"],
+                remove_accents(
+                    f"+ {topping}"
+                )
+            )
+
+            canvas_pdf.drawRightString(
+                right,
+                state["y"],
+                "+ " + pdf_money(
+                    TOPPINGS[topping]
+                )
+            )
+
             state["y"] -= 13
 
-        cup_price = calculate_cup_price(item)
-        c.setFont(bold_font, 8)
-        c.drawString(
-            left + 12, state["y"],
-            f"SL: {item['quantity']} x {pdf_money(cup_price)}"
+        cup_price = calculate_cup_price(
+            item
         )
-        c.drawRightString(right, state["y"], pdf_money(calculate_item_total(item)))
+
+        canvas_pdf.setFont(
+            bold_font,
+            8
+        )
+
+        canvas_pdf.drawString(
+            left + 12,
+            state["y"],
+            f"SL: {item['quantity']} x "
+            f"{pdf_money(cup_price)}"
+        )
+
+        canvas_pdf.drawRightString(
+            right,
+            state["y"],
+            pdf_money(
+                calculate_item_total(item)
+            )
+        )
+
         state["y"] -= 18
 
-    # Tổng tiền
+    # TOTAL
+
     ensure_space(80)
 
-    c.line(left, state["y"], right, state["y"])
+    canvas_pdf.line(
+        left,
+        state["y"],
+        right,
+        state["y"]
+    )
+
     state["y"] -= 22
 
-    c.setFont(bold_font, 12)
-    c.drawString(left, state["y"], "TONG THANH TOAN")
-    c.drawRightString(right, state["y"], pdf_money(calculate_total()))
+    canvas_pdf.setFont(
+        bold_font,
+        12
+    )
+
+    canvas_pdf.drawString(
+        left,
+        state["y"],
+        "TONG THANH TOAN"
+    )
+
+    canvas_pdf.drawRightString(
+        right,
+        state["y"],
+        pdf_money(
+            calculate_total()
+        )
+    )
+
     state["y"] -= 30
 
-    c.setFont(regular_font, 9)
-    c.drawCentredString(width / 2, state["y"], "Cam on quy khach!")
-    state["y"] -= 14
-    c.drawCentredString(width / 2, state["y"], "Hen gap lai tai Lucky Tea")
+    canvas_pdf.setFont(
+        regular_font,
+        9
+    )
 
-    c.save()
+    canvas_pdf.drawCentredString(
+        width / 2,
+        state["y"],
+        "Cam on quy khach!"
+    )
+
+    state["y"] -= 14
+
+    canvas_pdf.drawCentredString(
+        width / 2,
+        state["y"],
+        "Hen gap lai tai Lucky Tea"
+    )
+
+    canvas_pdf.save()
+
     buffer.seek(0)
+
     return buffer
 
 
 # =========================================================
-# ẢNH CHÍNH
+# ẢNH
 # =========================================================
 
 image_path = "photo1.jpg"
 
 if os.path.exists(image_path):
-    st.image(image_path, use_container_width=True)
+
+    st.image(
+        image_path,
+        use_container_width=True
+    )
+
 else:
-    st.warning("Không tìm thấy ảnh photo1.jpg")
+
+    st.warning(
+        "Không tìm thấy ảnh photo1.jpg"
+    )
 
 
 # =========================================================
 # HEADER
 # =========================================================
 
-st.markdown('<div class="lucky-title">🧋 LUCKY TEA</div>', unsafe_allow_html=True)
+st.markdown(
+    '<div class="lucky-title">'
+    '🧋 LUCKY TEA'
+    '</div>',
+    unsafe_allow_html=True
+)
+
 st.markdown(
     '<div class="lucky-subtitle">'
-    'Đặt món • Tùy chỉnh • Tính tiền • Xuất hóa đơn'
+    'Đặt món • Tùy chỉnh • Tính tiền • '
+    'Xuất hóa đơn'
     '</div>',
     unsafe_allow_html=True
 )
@@ -730,70 +1744,171 @@ st.divider()
 
 
 # =========================================================
-# 🤖 TRỢ LÝ CHỌN MÓN
+# CHATBOX AI
 # =========================================================
 
-with st.expander("🤖 Trợ lý chọn món (hỏi mình gợi ý nhé!)", expanded=True):
+with st.expander(
+    "🤖 Trợ lý AI Lucky Tea",
+    expanded=True
+):
 
-    # Nút hỏi nhanh
+    if OPENROUTER_API_KEY:
+
+        st.markdown(
+            '<div class="ai-status">'
+            '🟢 AI đang hoạt động — '
+            'Bạn có thể trò chuyện tự nhiên với mình!'
+            '</div>',
+            unsafe_allow_html=True
+        )
+
+    else:
+
+        st.markdown(
+            '<div class="ai-status">'
+            '🟡 Chưa cấu hình OpenRouter — '
+            'chatbot vẫn hoạt động ở chế độ gợi ý menu.'
+            '</div>',
+            unsafe_allow_html=True
+        )
+
+    # QUICK QUESTIONS
+
     q1, q2, q3, q4, q5 = st.columns(5)
 
-    q1.button("🔥 Bán chạy", use_container_width=True,
-              on_click=quick_ask, args=("Món bán chạy nhất",))
-    q2.button("💸 Giá rẻ", use_container_width=True,
-              on_click=quick_ask, args=("Món giá rẻ",))
-    q3.button("🆕 Món mới", use_container_width=True,
-              on_click=quick_ask, args=("Món mới",))
-    q4.button("🍑 Thanh mát", use_container_width=True,
-              on_click=quick_ask, args=("Món thanh mát giải nhiệt",))
-    q5.button("🥛 Béo ngậy", use_container_width=True,
-              on_click=quick_ask, args=("Món béo ngậy",))
+    q1.button(
+        "🔥 Bán chạy",
+        use_container_width=True,
+        on_click=quick_ask,
+        args=("Món nào bán chạy nhất?",)
+    )
 
-    # Khung chat
-    chat_box = st.container(height=420, border=True)
+    q2.button(
+        "💸 Giá rẻ",
+        use_container_width=True,
+        on_click=quick_ask,
+        args=("Có món nào giá rẻ dưới 30k không?",)
+    )
+
+    q3.button(
+        "🆕 Món mới",
+        use_container_width=True,
+        on_click=quick_ask,
+        args=("Cho mình xem món mới",)
+    )
+
+    q4.button(
+        "🍑 Thanh mát",
+        use_container_width=True,
+        on_click=quick_ask,
+        args=("Mình muốn uống món thanh mát",)
+    )
+
+    q5.button(
+        "🥛 Béo ngậy",
+        use_container_width=True,
+        on_click=quick_ask,
+        args=("Mình thích món béo ngậy",)
+    )
+
+    # CHAT AREA
+
+    chat_box = st.container(
+        height=430,
+        border=True
+    )
 
     with chat_box:
-        for msg_index, msg in enumerate(st.session_state.chat):
 
-            avatar = "🧋" if msg["role"] == "assistant" else "🙂"
+        for msg_index, msg in enumerate(
+            st.session_state.chat
+        ):
 
-            with st.chat_message(msg["role"], avatar=avatar):
+            avatar = (
+                "🧋"
+                if msg["role"] == "assistant"
+                else "🙂"
+            )
 
-                st.markdown(msg["content"])
+            with st.chat_message(
+                msg["role"],
+                avatar=avatar
+            ):
 
-                for d_index, name in enumerate(msg.get("drinks", [])):
+                st.markdown(
+                    msg["content"]
+                )
 
-                    b1, b2, b3 = st.columns([3, 1, 1.4])
+                drinks = msg.get(
+                    "drinks",
+                    []
+                )
 
-                    b1.markdown(
-                        f"**{name}**  \n{format_money(MENU[name])}"
+                for d_index, name in enumerate(
+                    drinks
+                ):
+
+                    b1, b2, b3 = st.columns(
+                        [3, 1, 1.4]
                     )
 
-                    b2.button(
-                        "Chọn",
-                        key=f"chat_select_{msg_index}_{d_index}",
-                        on_click=select_drink_from_chat,
-                        args=(name,),
-                        use_container_width=True
-                    )
+                    with b1:
 
-                    b3.button(
-                        "➕ Thêm nhanh",
-                        key=f"chat_add_{msg_index}_{d_index}",
-                        on_click=add_from_chat,
-                        args=(name,),
-                        use_container_width=True
-                    )
+                        st.markdown(
+                            f"**{name}**  \n"
+                            f"{format_money(MENU[name])}"
+                        )
 
-    # Ô nhập tin nhắn
-    with st.form("chat_form", clear_on_submit=True):
+                    with b2:
 
-        f1, f2 = st.columns([5, 1])
+                        st.button(
+                            "Chọn",
+                            key=(
+                                f"chat_select_"
+                                f"{msg_index}_"
+                                f"{d_index}"
+                            ),
+                            on_click=(
+                                select_drink_from_chat
+                            ),
+                            args=(name,),
+                            use_container_width=True
+                        )
+
+                    with b3:
+
+                        st.button(
+                            "➕ Thêm nhanh",
+                            key=(
+                                f"chat_add_"
+                                f"{msg_index}_"
+                                f"{d_index}"
+                            ),
+                            on_click=(
+                                add_from_chat
+                            ),
+                            args=(name,),
+                            use_container_width=True
+                        )
+
+    # INPUT
+
+    with st.form(
+        "chat_form",
+        clear_on_submit=True
+    ):
+
+        f1, f2 = st.columns(
+            [5, 1]
+        )
 
         f1.text_input(
             "Nhập câu hỏi",
             key="chat_text",
-            placeholder="VD: món nào rẻ dưới 30k, thanh mát, ít ngọt...",
+            placeholder=(
+                "VD: Tui thích béo nhưng ít ngọt, "
+                "tư vấn cho tui..."
+            ),
             label_visibility="collapsed"
         )
 
@@ -803,18 +1918,27 @@ with st.expander("🤖 Trợ lý chọn món (hỏi mình gợi ý nhé!)", expa
             on_click=submit_chat
         )
 
-    st.button("🧹 Xóa lịch sử chat", on_click=reset_chat)
+    st.button(
+        "🧹 Xóa lịch sử chat",
+        on_click=reset_chat
+    )
 
 
 # =========================================================
-# KHU VỰC CHỌN MÓN
+# CHỌN MÓN
 # =========================================================
 
-left_col, right_col = st.columns([1, 1], gap="large")
+left_col, right_col = st.columns(
+    [1, 1],
+    gap="large"
+)
+
 
 with left_col:
 
-    st.subheader("🧋 Chọn thức uống")
+    st.subheader(
+        "🧋 Chọn thức uống"
+    )
 
     drink = st.selectbox(
         "Loại trà sữa",
@@ -822,19 +1946,24 @@ with left_col:
         key="drink_select",
         format_func=drink_label
     )
+
     price = MENU[drink]
 
     size = st.radio(
         "📏 Size",
         options=list(SIZES.keys()),
-        format_func=lambda s: (
-            f"{s} (+{format_money(SIZES[s])})" if SIZES[s] else f"{s} (mặc định)"
-        ),
+        format_func=lambda s:
+            (
+                f"{s} (+{format_money(SIZES[s])})"
+                if SIZES[s]
+                else f"{s} (mặc định)"
+            ),
         horizontal=True
     )
 
     st.info(
-        f"Giá nước size {size}: **{format_money(price + SIZES[size])}**"
+        f"Giá nước size {size}: "
+        f"**{format_money(price + SIZES[size])}**"
     )
 
     quantity = st.number_input(
@@ -845,9 +1974,12 @@ with left_col:
         step=1
     )
 
+
 with right_col:
 
-    st.subheader("⚙️ Tùy chỉnh")
+    st.subheader(
+        "⚙️ Tùy chỉnh"
+    )
 
     sugar = st.select_slider(
         "🍬 Mức độ đường",
@@ -863,43 +1995,70 @@ with right_col:
 
 
 # =========================================================
-# TOPPING (THEO TỪNG LY)
+# TOPPING
 # =========================================================
 
-st.subheader("🍡 Thêm topping")
+st.subheader(
+    "🍡 Thêm topping"
+)
 
-topping_format = lambda t: f"{t} (+{format_money(TOPPINGS[t])})"
+
+def topping_format(t):
+
+    return (
+        f"{t} "
+        f"(+{format_money(TOPPINGS[t])})"
+    )
+
 
 per_cup_mode = False
+
 if quantity > 1:
+
     per_cup_mode = st.checkbox(
-        f"Mỗi ly chọn topping khác nhau ({quantity} ly)",
+        f"Mỗi ly chọn topping khác nhau "
+        f"({quantity} ly)",
         value=False
     )
 
+
 cup_toppings = []
+
 
 if per_cup_mode:
 
-    for i in range(int(quantity)):
+    for i in range(
+        int(quantity)
+    ):
+
         selected = st.multiselect(
             f"Topping cho ly {i + 1}",
             list(TOPPINGS.keys()),
             format_func=topping_format,
             key=f"cup_topping_{i}"
         )
-        cup_toppings.append(selected)
+
+        cup_toppings.append(
+            selected
+        )
 
 else:
 
     selected = st.multiselect(
-        "Chọn topping (áp dụng cho tất cả ly)" if quantity > 1
-        else "Chọn topping",
+        (
+            "Chọn topping "
+            "(áp dụng cho tất cả ly)"
+            if quantity > 1
+            else "Chọn topping"
+        ),
         list(TOPPINGS.keys()),
         format_func=topping_format,
         key="shared_topping"
     )
-    cup_toppings = [selected] * int(quantity)
+
+    cup_toppings = [
+        selected
+    ] * int(quantity)
 
 
 # =========================================================
@@ -907,15 +2066,30 @@ else:
 # =========================================================
 
 current_item_total = sum(
-    price + SIZES[size] + sum(TOPPINGS[t] for t in tops)
+
+    price
+    + SIZES[size]
+    + sum(
+        TOPPINGS[t]
+        for t in tops
+    )
+
     for tops in cup_toppings
 )
+
 
 st.markdown(
     f"""
     <div class="total-box">
-        <div class="total-title">Thành tiền món đang chọn</div>
-        <div class="total-money">{format_money(current_item_total)}</div>
+
+        <div class="total-title">
+            Thành tiền món đang chọn
+        </div>
+
+        <div class="total-money">
+            {format_money(current_item_total)}
+        </div>
+
     </div>
     """,
     unsafe_allow_html=True
@@ -923,13 +2097,18 @@ st.markdown(
 
 
 # =========================================================
-# THÊM MÓN VÀO HÓA ĐƠN
+# THÊM VÀO HÓA ĐƠN
 # =========================================================
 
-if st.button("➕ THÊM MÓN VÀO HÓA ĐƠN", use_container_width=True):
+if st.button(
+    "➕ THÊM MÓN VÀO HÓA ĐƠN",
+    use_container_width=True
+):
 
     if per_cup_mode:
+
         for tops in cup_toppings:
+
             st.session_state.cart.append({
                 "name": drink,
                 "price": price,
@@ -939,126 +2118,242 @@ if st.button("➕ THÊM MÓN VÀO HÓA ĐƠN", use_container_width=True):
                 "sugar": sugar,
                 "ice": ice
             })
+
     else:
+
         st.session_state.cart.append({
             "name": drink,
             "price": price,
             "size": size,
             "quantity": int(quantity),
-            "toppings": list(cup_toppings[0]),
+            "toppings": list(
+                cup_toppings[0]
+            ),
             "sugar": sugar,
             "ice": ice
         })
 
     st.toast(
-        f"Đã thêm {int(quantity)} ly {drink} (size {size}) vào hóa đơn!",
+        f"Đã thêm {int(quantity)} ly "
+        f"{drink} vào hóa đơn!",
         icon="✅"
     )
+
     st.rerun()
 
 
 # =========================================================
-# HÓA ĐƠN HIỆN TẠI
+# HÓA ĐƠN
 # =========================================================
 
 st.divider()
 
 st.markdown(
-    f'<div class="bill-number">🧾 HÓA ĐƠN {get_bill_number()}</div>',
+    f"""
+    <div class="bill-number">
+        🧾 HÓA ĐƠN {get_bill_number()}
+    </div>
+    """,
     unsafe_allow_html=True
 )
 
-if len(st.session_state.cart) == 0:
 
-    st.info("🧾 Chưa có món nào trong hóa đơn.")
+if not st.session_state.cart:
+
+    st.info(
+        "🧾 Chưa có món nào trong hóa đơn."
+    )
 
 else:
 
-    for index, item in enumerate(st.session_state.cart):
+    for index, item in enumerate(
+        st.session_state.cart
+    ):
 
-        cup_price = calculate_cup_price(item)
-        item_total = calculate_item_total(item)
+        cup_price = calculate_cup_price(
+            item
+        )
 
-        with st.container(border=True):
+        item_total = calculate_item_total(
+            item
+        )
 
-            col1, col2, col3 = st.columns([4, 2, 2])
+        with st.container(
+            border=True
+        ):
+
+            col1, col2, col3 = st.columns(
+                [4, 2, 2]
+            )
 
             with col1:
-                st.markdown(f"### {index + 1}. {item['name']} — Size {item['size']}")
-                st.write(f"🍬 Đường: **{item['sugar']}**  |  🧊 Đá: **{item['ice']}**")
+
+                st.markdown(
+                    f"### {index + 1}. "
+                    f"{item['name']} — "
+                    f"Size {item['size']}"
+                )
+
+                st.write(
+                    f"🍬 Đường: "
+                    f"**{item['sugar']}**  |  "
+                    f"🧊 Đá: "
+                    f"**{item['ice']}**"
+                )
 
                 if item["toppings"]:
-                    for t in item["toppings"]:
-                        st.write(f"🍡 {t}: +{format_money(TOPPINGS[t])}")
+
+                    for topping in item["toppings"]:
+
+                        st.write(
+                            f"🍡 {topping}: "
+                            f"+{format_money(TOPPINGS[topping])}"
+                        )
+
                 else:
-                    st.write("🍡 Topping: Không")
+
+                    st.write(
+                        "🍡 Topping: Không"
+                    )
 
             with col2:
-                st.write("Số lượng")
-                st.markdown(f"### {item['quantity']}")
-                st.write("Giá 1 ly: " + format_money(cup_price))
+
+                st.write(
+                    "Số lượng"
+                )
+
+                st.markdown(
+                    f"### {item['quantity']}"
+                )
+
+                st.write(
+                    "Giá 1 ly: "
+                    + format_money(
+                        cup_price
+                    )
+                )
 
             with col3:
-                st.write("Thành tiền")
-                st.markdown(f"### {format_money(item_total)}")
+
+                st.write(
+                    "Thành tiền"
+                )
+
+                st.markdown(
+                    f"### {format_money(item_total)}"
+                )
 
             if st.button(
                 "🗑️ Xóa món này",
                 key=f"delete_{index}",
                 use_container_width=True
             ):
-                st.session_state.cart.pop(index)
+
+                st.session_state.cart.pop(
+                    index
+                )
+
                 st.rerun()
 
-    # Tổng tiền
+
+    # =====================================================
+    # TOTAL
+    # =====================================================
+
     st.markdown(
         f"""
         <div class="total-box">
+
             <div class="total-title">
-                💰 TỔNG THANH TOÁN ({total_cups()} ly)
+                💰 TỔNG THANH TOÁN
+                ({total_cups()} ly)
             </div>
-            <div class="total-money">{format_money(calculate_total())}</div>
+
+            <div class="total-money">
+                {format_money(calculate_total())}
+            </div>
+
         </div>
         """,
         unsafe_allow_html=True
     )
 
-    # Xuất hóa đơn
-    st.subheader("🧾 Xuất hóa đơn")
+
+    # =====================================================
+    # PDF
+    # =====================================================
+
+    st.subheader(
+        "🧾 Xuất hóa đơn"
+    )
 
     try:
+
         pdf_file = create_pdf()
 
         st.download_button(
             label="📄 XUẤT HÓA ĐƠN PDF",
             data=pdf_file,
-            file_name=f"{get_bill_number()}.pdf",
+            file_name=(
+                f"{get_bill_number()}.pdf"
+            ),
             mime="application/pdf",
             use_container_width=True
         )
 
     except Exception as error:
-        st.error("Không thể tạo hóa đơn PDF.")
-        st.code(str(error))
 
-    # Thanh toán
+        st.error(
+            "Không thể tạo hóa đơn PDF."
+        )
+
+        st.code(
+            str(error)
+        )
+
+
+    # =====================================================
+    # PAYMENT
+    # =====================================================
+
     st.divider()
 
-    col_pay, col_clear = st.columns(2)
+    col_pay, col_clear = st.columns(
+        2
+    )
+
 
     with col_pay:
-        if st.button("💰 THANH TOÁN & TẠO BILL MỚI", use_container_width=True):
+
+        if st.button(
+            "💰 THANH TOÁN & TẠO BILL MỚI",
+            use_container_width=True
+        ):
+
+            old_bill = get_bill_number()
+
             st.session_state.cart = []
+
             st.session_state.bill_number += 1
+
             st.toast(
-                f"Thanh toán thành công! Bill {get_bill_number()} đã được tạo.",
+                f"Thanh toán thành công! "
+                f"Bill {old_bill} đã hoàn tất.",
                 icon="✅"
             )
+
             st.rerun()
 
+
     with col_clear:
-        if st.button("🧹 XÓA TOÀN BỘ HÓA ĐƠN", use_container_width=True):
+
+        if st.button(
+            "🧹 XÓA TOÀN BỘ HÓA ĐƠN",
+            use_container_width=True
+        ):
+
             st.session_state.cart = []
+
             st.rerun()
 
 
@@ -1071,8 +2366,15 @@ st.divider()
 st.markdown(
     """
     <div style="text-align:center;">
+
         🧋 <b>Lucky Tea</b><br>
-        Cảm ơn quý khách đã ủng hộ 💕
+
+        Cảm ơn quý khách đã ủng hộ 💕<br>
+
+        <small>
+        AI Assistant • Order • Customize • Bill
+        </small>
+
     </div>
     """,
     unsafe_allow_html=True
